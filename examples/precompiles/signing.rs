@@ -86,6 +86,14 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
       let sign = AllocatedNum::alloc(cs.namespace(|| format!("input {i}")), || {
         Ok(*num.get_value().get()?)
       })?;
+
+      // num * 1 = sign
+      cs.enforce(
+        || format!("packing constraint {i}"),
+        |_| num.lc(Scalar::ONE),
+        |lc| lc + CS::one(),
+        |lc| lc + sign.get_variable(),
+      );
     }
 
     Ok(z.to_owned())
