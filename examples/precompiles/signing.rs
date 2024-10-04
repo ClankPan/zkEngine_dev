@@ -52,10 +52,8 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
   fn synthesize<CS: ConstraintSystem<Scalar>>(
     &self,
     cs: &mut CS,
-    _z: &[AllocatedNum<Scalar>],
+    z: &[AllocatedNum<Scalar>],
   ) -> Result<Vec<AllocatedNum<Scalar>>, SynthesisError> {
-    let mut z_out: Vec<AllocatedNum<Scalar>> = Vec::new();
-
     let secret_key = b"0123456789abcdef0123456789abcdef";
 
     let (private_key, _) = create_key_pair_from_bytes(secret_key);
@@ -88,18 +86,9 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
       let sign = AllocatedNum::alloc(cs.namespace(|| format!("input {i}")), || {
         Ok(*num.get_value().get()?)
       })?;
-
-      // num * 1 = sign
-      cs.enforce(
-        || format!("packing constraint {i}"),
-        |_| num.lc(Scalar::ONE),
-        |lc| lc + CS::one(),
-        |lc| lc + sign.get_variable(),
-      );
-      z_out.push(sign);
     }
 
-    Ok(z_out)
+    Ok(z.to_owned())
   }
 }
 
