@@ -1,15 +1,13 @@
 //! Simulating a signing circuit
 #![allow(non_snake_case)]
-use bellpepper::gadgets::{sha256::sha256, Assignment};
+use bellpepper::gadgets::Assignment;
 use bellpepper_core::{
   boolean::{AllocatedBit, Boolean},
   num::{AllocatedNum, Num},
   ConstraintSystem, SynthesisError,
 };
 use core::marker::PhantomData;
-use core::time::Duration;
-use criterion::*;
-use ff::{PrimeField, PrimeFieldBits};
+use ff::{Field, PrimeField, PrimeFieldBits};
 use nova::{
   provider::{PallasEngine, VestaEngine},
   traits::{
@@ -19,23 +17,23 @@ use nova::{
   },
   PublicParams, RecursiveSNARK,
 };
+use std::time::Instant;
 
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
-use sha2::{Digest, Sha256};
 
 type E1 = PallasEngine;
 type E2 = VestaEngine;
 
 #[derive(Clone, Debug)]
 struct SigningCircuit<Scalar: PrimeField> {
-  preimage: Vec<u8>, // The hash of the message to be signed
+  hash: Vec<u8>, // The hash of the message to be signed
   _p: PhantomData<Scalar>,
 }
 
 impl<Scalar: PrimeField + PrimeFieldBits> SigningCircuit<Scalar> {
-  pub fn new(preimage: Vec<u8>) -> Self {
+  pub fn new(hash: Vec<u8>) -> Self {
     Self {
-      preimage,
+      hash,
       _p: PhantomData,
     }
   }
@@ -54,20 +52,15 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
   fn synthesize<CS: ConstraintSystem<Scalar>>(
     &self,
     cs: &mut CS,
-    z: &[AllocatedNum<Scalar>],
+    _z: &[AllocatedNum<Scalar>],
   ) -> Result<Vec<AllocatedNum<Scalar>>, SynthesisError> {
     let mut z_out: Vec<AllocatedNum<Scalar>> = Vec::new();
 
-    let secret_key_repr = z[0]
-      .get_value()
-      .ok_or(SynthesisError::AssignmentMissing)?
-      .to_repr();
-
-    let secret_key = secret_key_repr.as_ref();
+    let secret_key = b"0123456789abcdef0123456789abcdef";
 
     let (private_key, _) = create_key_pair_from_bytes(secret_key);
 
-    let signature = sign_hash_slice(&private_key, &self.preimage);
+    let signature = sign_hash_slice(&private_key, &self.hash);
     let signature_bytes = signature.serialize_compact();
 
     let signature_values: Vec<_> = signature_bytes
@@ -123,72 +116,97 @@ fn sign_hash_slice(secret_key: &SecretKey, hash: &[u8]) -> Signature {
   secp.sign_ecdsa(&message, &secret_key)
 }
 
-criterion_group! {
-name = recursive_snark;
-config = Criterion::default().warm_up_time(Duration::from_millis(3000));
-targets = bench_recursive_snark
-}
+fn main() {
+  println!("=========================================================");
+  println!("Nova-based Signing example");
+  println!("=========================================================");
 
-criterion_main!(recursive_snark);
+  type C1 = SigningCircuit<<E1 as Engine>::Scalar>;
+  type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
 
-fn bench_recursive_snark(c: &mut Criterion) {
-  // Test vectors
-  let circuits = vec![
-    SigningCircuit::new(vec![0u8; 1 << 6]),
-    SigningCircuit::new(vec![0u8; 1 << 7]),
-    SigningCircuit::new(vec![0u8; 1 << 8]),
-    SigningCircuit::new(vec![0u8; 1 << 9]),
-    SigningCircuit::new(vec![0u8; 1 << 10]),
-    SigningCircuit::new(vec![0u8; 1 << 11]),
-    SigningCircuit::new(vec![0u8; 1 << 12]),
-    SigningCircuit::new(vec![0u8; 1 << 13]),
-    SigningCircuit::new(vec![0u8; 1 << 14]),
-    SigningCircuit::new(vec![0u8; 1 << 15]),
-    SigningCircuit::new(vec![0u8; 1 << 16]),
-  ];
+  let hash = [0u8; 32];
+  let circuit_primary = C1::new(hash.to_vec());
+  let circuit_secondary = TrivialCircuit::default();
 
-  for circuit_primary in circuits {
-    let mut group = c.benchmark_group(format!(
-      "NovaProve-Sha256-message-len-{}",
-      circuit_primary.preimage.len()
-    ));
-    group.sample_size(10);
+  // produce public parameters
+  let start = Instant::now();
+  println!("Producing public parameters...");
+  let pp = PublicParams::<E1>::setup(
+    &circuit_primary,
+    &circuit_secondary,
+    &*default_ck_hint(),
+    &*default_ck_hint(),
+  )
+  .unwrap();
+  println!("PublicParams::setup, took {:?} ", start.elapsed());
 
-    // Produce public parameters
-    let ttc = TrivialCircuit::default();
-    let pp = PublicParams::<E1>::setup(
-      &circuit_primary,
-      &ttc,
-      &*default_ck_hint(),
-      &*default_ck_hint(),
-    )
+  // produce a recursive SNARK
+  println!("Generating a RecursiveSNARK...");
+  let mut recursive_snark: RecursiveSNARK<E1> = RecursiveSNARK::<E1>::new(
+    &pp,
+    &circuit_primary,
+    &circuit_secondary,
+    &[<E1 as Engine>::Scalar::zero()],
+    &[<E2 as Engine>::Scalar::zero()],
+  )
+  .unwrap();
+
+  let start = Instant::now();
+  recursive_snark
+    .prove_step(&pp, &circuit_primary, &circuit_secondary)
     .unwrap();
 
-    let circuit_secondary = TrivialCircuit::default();
-    let z0_primary = vec![<E1 as Engine>::Scalar::from(2u64)];
-    let z0_secondary = vec![<E2 as Engine>::Scalar::from(2u64)];
+  println!("RecursiveSNARK::proving took {:?} ", start.elapsed());
 
-    group.bench_function("Prove", |b| {
-      b.iter(|| {
-        let mut recursive_snark = RecursiveSNARK::new(
-          black_box(&pp),
-          black_box(&circuit_primary),
-          black_box(&circuit_secondary),
-          black_box(&z0_primary),
-          black_box(&z0_secondary),
-        )
-        .unwrap();
+  // verify the recursive SNARK
+  println!("Verifying a RecursiveSNARK...");
+  let res = recursive_snark.verify(
+    &pp,
+    1,
+    &[<E1 as Engine>::Scalar::ZERO],
+    &[<E2 as Engine>::Scalar::ZERO],
+  );
+  println!("RecursiveSNARK::verify: {:?}", res.is_ok(),);
+  res.unwrap();
 
-        // produce a recursive SNARK for a step of the recursion
-        assert!(recursive_snark
-          .prove_step(
-            black_box(&pp),
-            black_box(&circuit_primary),
-            black_box(&circuit_secondary),
-          )
-          .is_ok());
-      })
-    });
-    group.finish();
-  }
+  // Skipped for now, needed more structs as EE1 and EE2, S1 and S2
+  /*   // produce a compressed SNARK
+  println!("Generating a CompressedSNARK using Spartan with HyperKZG...");
+  let (pk, vk) = CompressedSNARK::<_, S1, S2>::setup(&pp).unwrap();
+
+  let start = Instant::now();
+
+  let res = CompressedSNARK::<_, S1, S2>::prove(&pp, &pk, &recursive_snark);
+  println!(
+    "CompressedSNARK::prove: {:?}, took {:?}",
+    res.is_ok(),
+    start.elapsed()
+  );
+  assert!(res.is_ok());
+  let compressed_snark = res.unwrap();
+
+  let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+  bincode::serialize_into(&mut encoder, &compressed_snark).unwrap();
+  let compressed_snark_encoded = encoder.finish().unwrap();
+  println!(
+    "CompressedSNARK::len {:?} bytes",
+    compressed_snark_encoded.len()
+  );
+
+  // verify the compressed SNARK
+  println!("Verifying a CompressedSNARK...");
+  let start = Instant::now();
+  let res = compressed_snark.verify(
+    &vk,
+    num_steps,
+    &[<E1 as Engine>::Scalar::ZERO],
+    &[<E2 as Engine>::Scalar::ZERO],
+  );
+  println!(
+    "CompressedSNARK::verify: {:?}, took {:?}",
+    res.is_ok(),
+    start.elapsed()
+  );
+  res.unwrap();
+  println!("========================================================="); */
 }

@@ -11,7 +11,6 @@ use bellpepper_core::{
 };
 use core::marker::PhantomData;
 use core::time::Duration;
-use criterion::*;
 use ff::{PrimeField, PrimeFieldBits};
 use nova::{
   provider::{PallasEngine, VestaEngine},
@@ -127,15 +126,7 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for Sha256Circuit<
   }
 }
 
-criterion_group! {
-name = recursive_snark;
-config = Criterion::default().warm_up_time(Duration::from_millis(3000));
-targets = bench_recursive_snark
-}
-
-criterion_main!(recursive_snark);
-
-fn bench_recursive_snark(c: &mut Criterion) {
+fn main() {
   // Test vectors
   let circuits = vec![
     Sha256Circuit::new(vec![0u8; 1 << 6]),
@@ -152,12 +143,6 @@ fn bench_recursive_snark(c: &mut Criterion) {
   ];
 
   for circuit_primary in circuits {
-    let mut group = c.benchmark_group(format!(
-      "NovaProve-Sha256-message-len-{}",
-      circuit_primary.preimage.len()
-    ));
-    group.sample_size(10);
-
     // Produce public parameters
     let ttc = TrivialCircuit::default();
     let pp = PublicParams::<E1>::setup(
@@ -172,27 +157,18 @@ fn bench_recursive_snark(c: &mut Criterion) {
     let z0_primary = vec![<E1 as Engine>::Scalar::from(2u64)];
     let z0_secondary = vec![<E2 as Engine>::Scalar::from(2u64)];
 
-    group.bench_function("Prove", |b| {
-      b.iter(|| {
-        let mut recursive_snark = RecursiveSNARK::new(
-          black_box(&pp),
-          black_box(&circuit_primary),
-          black_box(&circuit_secondary),
-          black_box(&z0_primary),
-          black_box(&z0_secondary),
-        )
-        .unwrap();
+    let mut recursive_snark = RecursiveSNARK::new(
+      (&pp),
+      (&circuit_primary),
+      (&circuit_secondary),
+      (&z0_primary),
+      (&z0_secondary),
+    )
+    .unwrap();
 
-        // produce a recursive SNARK for a step of the recursion
-        assert!(recursive_snark
-          .prove_step(
-            black_box(&pp),
-            black_box(&circuit_primary),
-            black_box(&circuit_secondary),
-          )
-          .is_ok());
-      })
-    });
-    group.finish();
+    // produce a recursive SNARK for a step of the recursion
+    assert!(recursive_snark
+      .prove_step((&pp), (&circuit_primary), (&circuit_secondary),)
+      .is_ok());
   }
 }
