@@ -15,15 +15,19 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 /// Create a circuit that signs a message
 #[derive(Clone)]
 pub struct SigningCircuit<Scalar: PrimeField> {
-  hash: Vec<u8>, // The hash of the message to be signed
+  hash: Vec<u8>,       // The hash of the message to be signed
+  secret_key: Vec<u8>, // The secret key to sign the message
   _p: PhantomData<Scalar>,
 }
 
 impl<Scalar: PrimeField + PrimeFieldBits> SigningCircuit<Scalar> {
-  /// Create a new signing circuit with the hash to be signed in input
-  pub fn new(hash: Vec<u8>) -> Self {
+  /// Create a new signing circuit
+  /// - hash: The hash of the message to be signed, as a 32bytes vector
+  /// - secret_key: The secret key to sign the message, as a 32bytes vector
+  pub fn new(hash: Vec<u8>, secret_key: Vec<u8>) -> Self {
     Self {
       hash,
+      secret_key,
       _p: PhantomData,
     }
   }
@@ -46,9 +50,7 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
   ) -> Result<Vec<AllocatedNum<Scalar>>, SynthesisError> {
     let mut z_out: Vec<AllocatedNum<Scalar>> = Vec::new();
 
-    let secret_key = b"0123456789abcdef0123456789abcdef";
-
-    let (private_key, _) = create_key_pair_from_bytes(secret_key);
+    let (private_key, _) = create_key_pair_from_bytes(&self.secret_key.as_slice());
 
     let signature = sign_hash_slice(&private_key, &self.hash);
     let signature_bytes = signature.serialize_compact();

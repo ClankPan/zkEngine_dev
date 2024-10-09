@@ -22,8 +22,11 @@ fn main() {
   type C1 = SigningCircuit<<E1 as Engine>::Scalar>;
   type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
 
+  let secret_key_hex = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  let secret_key = hex::decode(secret_key_hex).unwrap();
+
   let hash = [0u8; 32];
-  let circuit_primary = C1::new(hash.to_vec());
+  let circuit_primary = C1::new(hash.to_vec(), secret_key.to_vec());
   let circuit_secondary = C2::default();
 
   // produce public parameters
