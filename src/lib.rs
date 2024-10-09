@@ -6,6 +6,7 @@
 mod circuits;
 pub mod errors;
 pub mod pcd;
+pub mod precompiles;
 pub mod provider;
 pub mod run;
 pub mod snark;

@@ -25,6 +25,7 @@ paste = "1.0.14"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing = { version = "0.1.40", features = ["log"] }
 thiserror = "1.0.61"
+secp256k1 = "0.29.1"
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -40,13 +41,13 @@ wasmi_wasi = { path = "./third-party/wasmi/crates/wasi" }
 # This is needed to ensure halo2curves, which imports pasta-curves, uses the *same* traits in bn256_grumpkin
 pasta_curves = { git = "https://github.com/lurk-lab/pasta_curves", branch = "dev" }
 
-[[example]]
-name = "sha256"
-path = "examples/precompiles/sha256.rs"
-
-[[example]]
+[[bin]]
 name = "signing"
-path = "examples/precompiles/signing.rs"
+path = "src/precompiles/signing.rs"
+
+[[bin]]
+name = "sha256"
+path = "src/precompiles/sha256.rs"
 
 [dev-dependencies]
 sha2 = "0.10.8"
