@@ -35,7 +35,7 @@ impl<Scalar: PrimeField + PrimeFieldBits> SigningCircuit<Scalar> {
 
 impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit<Scalar> {
   fn arity(&self) -> usize {
-    2
+    4
   }
 
   /// No clue if it is supposed to be incremental or external, just took a guess
@@ -54,6 +54,7 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
 
     let signature = sign_hash_slice(&private_key, &self.hash);
     let signature_bytes = signature.serialize_compact();
+    println!("Signature_bytes: {:?}", signature_bytes);
 
     let signature_values: Vec<_> = signature_bytes
       .into_iter()
@@ -68,7 +69,7 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
       .map(|b| b.map(Boolean::from))
       .collect::<Result<Vec<_>, _>>()?;
 
-    for (i, sign_bits) in signature_bits.chunks(256_usize).enumerate() {
+    for (i, sign_bits) in signature_bits.chunks(128_usize).enumerate() {
       let mut num = Num::<Scalar>::zero();
       let mut coeff = Scalar::ONE;
       for bit in sign_bits {
@@ -88,7 +89,9 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
         |lc| lc + CS::one(),
         |lc| lc + sign.get_variable(),
       );
-
+      let tmp = num.get_value().unwrap().to_repr();
+      let sign_bytes: &[u8] = tmp.as_ref();
+      println!("Sign_bytes: {:?}", sign_bytes);
       z_out.push(sign);
     }
 

@@ -47,7 +47,7 @@ fn main() {
     &pp,
     &circuit_primary,
     &circuit_secondary,
-    &[<E1 as Engine>::Scalar::zero(); 2], // Matching the arity
+    &[<E1 as Engine>::Scalar::zero(); 4], // Matching the arity
     &[<E2 as Engine>::Scalar::zero()],
   )
   .unwrap();
@@ -64,7 +64,7 @@ fn main() {
   let res = recursive_snark.verify(
     &pp,
     1,
-    &[<E1 as Engine>::Scalar::ZERO; 2], // Matching the arity
+    &[<E1 as Engine>::Scalar::ZERO; 4], // Matching the arity
     &[<E2 as Engine>::Scalar::ZERO],
   );
   println!("RecursiveSNARK::verify: {:?}", res.is_ok(),);
