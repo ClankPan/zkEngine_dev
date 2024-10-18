@@ -41,13 +41,13 @@ wasmi_wasi = { path = "./third-party/wasmi/crates/wasi" }
 # This is needed to ensure halo2curves, which imports pasta-curves, uses the *same* traits in bn256_grumpkin
 pasta_curves = { git = "https://github.com/lurk-lab/pasta_curves", branch = "dev" }
 
-[[bin]]
-name = "signing"
-path = "src/precompiles/signing.rs"
+# [[bin]]
+# name = "signing"
+# path = "src/precompiles/signing.rs"
 
-[[bin]]
-name = "sha256"
-path = "src/precompiles/sha256.rs"
+# [[bin]]
+# name = "sha256"
+# path = "src/precompiles/sha256.rs"
 
 [dev-dependencies]
 sha2 = "0.10.8"

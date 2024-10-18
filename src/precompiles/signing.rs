@@ -7,10 +7,19 @@ use bellpepper_core::{
   ConstraintSystem, SynthesisError,
 };
 use core::marker::PhantomData;
-use ff::{PrimeField, PrimeFieldBits};
-use nova::traits::circuit::StepCircuit;
-
+use ff::{Field, PrimeField, PrimeFieldBits};
+use nova::{
+  provider::{ipa_pc, PallasEngine, VestaEngine},
+  spartan::{ppsnark, snark},
+  traits::{
+    circuit::{StepCircuit, TrivialCircuit},
+    snark::RelaxedR1CSSNARKTrait,
+    Engine,
+  },
+  CompressedSNARK, PublicParams, RecursiveSNARK,
+};
 use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
+use std::error;
 
 /// Create a circuit that signs a message
 #[derive(Clone)]
@@ -18,6 +27,16 @@ pub struct SigningCircuit<Scalar: PrimeField> {
   hash: Vec<u8>,       // The hash of the message to be signed
   secret_key: Vec<u8>, // The secret key to sign the message
   _p: PhantomData<Scalar>,
+}
+
+impl Default for SigningCircuit<<E1 as Engine>::Scalar> {
+  fn default() -> Self {
+    Self {
+      hash: vec![0u8; 32],
+      secret_key: vec![1u8; 32],
+      _p: PhantomData,
+    }
+  }
 }
 
 impl<Scalar: PrimeField + PrimeFieldBits> SigningCircuit<Scalar> {
@@ -107,4 +126,81 @@ fn sign_hash_slice(secret_key: &SecretKey, hash: &[u8]) -> Signature {
   let message = Message::from_digest_slice(&hash).expect("32 bytes");
   let secp = Secp256k1::new();
   secp.sign_ecdsa(&message, &secret_key)
+}
+
+type E1 = PallasEngine;
+type E2 = VestaEngine;
+type EE1 = ipa_pc::EvaluationEngine<E1>;
+type EE2 = ipa_pc::EvaluationEngine<E2>;
+type S1 = ppsnark::RelaxedR1CSSNARK<E1, EE1>;
+type S2 = snark::RelaxedR1CSSNARK<E2, EE2>;
+
+impl SigningCircuit<<E1 as Engine>::Scalar> {
+  /// Builds the public parameters for the circuit
+  pub fn get_public_params(&self) -> Result<PublicParams<E1>, Box<dyn error::Error>> {
+    type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
+
+    let circuit_secondary = C2::default();
+
+    let pp =
+      PublicParams::<E1>::setup(self, &circuit_secondary, &*S1::ck_floor(), &*S2::ck_floor())?;
+
+    Ok(pp)
+  }
+
+  /// Proves the circuit, this function builds the public params and returns a recursive SNARK
+  pub fn prove(&self) -> Result<RecursiveSNARK<E1>, Box<dyn error::Error>> {
+    let pp = self.get_public_params()?;
+
+    type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
+    let circuit_secondary = C2::default();
+    let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
+    let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
+
+    let mut recursive_snark: RecursiveSNARK<E1> =
+      RecursiveSNARK::<E1>::new(&pp, self, &circuit_secondary, &z0_primary, &z0_secondary)?;
+
+    recursive_snark.prove_step(&pp, self, &circuit_secondary)?;
+
+    Ok(recursive_snark)
+  }
+
+  /// Compressed a recursive SNARK into a compressed SNARK, using the circuit public params
+  pub fn compress_proof(
+    public_params: &PublicParams<E1>,
+    recursive_snark: &RecursiveSNARK<E1>,
+  ) -> Result<CompressedSNARK<E1, S1, S2>, Box<dyn error::Error>> {
+    let (pk, _) = CompressedSNARK::<E1, S1, S2>::setup(&public_params)?;
+    let compressed_proof =
+      CompressedSNARK::<E1, S1, S2>::prove(&public_params, &pk, recursive_snark)?;
+    Ok(compressed_proof)
+  }
+
+  /// Verifies a recursive SNARK, returns the field elements of the circuit output
+  pub fn verify(
+    public_params: &PublicParams<E1>,
+    recursive_snark: &RecursiveSNARK<E1>,
+  ) -> Result<Vec<<E1 as Engine>::Scalar>, Box<dyn error::Error>> {
+    let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
+    let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
+
+    let res = recursive_snark.verify(&public_params, 1, &z0_primary, &z0_secondary);
+    let (vec, _) = res?;
+
+    Ok(vec)
+  }
+
+  /// Verifies a compressed SNARK, returns the field elements of the circuit output
+  pub fn verify_compressed(
+    public_params: &PublicParams<E1>,
+    compressed_proof: &CompressedSNARK<E1, S1, S2>,
+  ) -> Result<Vec<<E1 as Engine>::Scalar>, Box<dyn error::Error>> {
+    let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
+    let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
+
+    let (_, vk) = CompressedSNARK::<E1, S1, S2>::setup(&public_params)?;
+    let (res, _) = compressed_proof.verify(&vk, 1, &z0_primary, &z0_secondary)?;
+
+    Ok(res)
+  }
 }
