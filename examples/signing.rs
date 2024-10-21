@@ -1,7 +1,7 @@
 //! Simulating a signing circuit
 #![allow(non_snake_case)]
 
-use zk_engine::precompiles::signing::{CompressedProof, SigningCircuit};
+use zk_engine::precompiles::signing::{CircuitTypes, SigningCircuit};
 
 use serde::Serialize;
 use std::time::Instant;
@@ -9,10 +9,10 @@ use std::time::Instant;
 #[derive(Serialize)]
 struct SendDataBody {
   data: String,
-  snark: <SigningCircuit as CompressedProof>::CompressedProof,
+  snark: <SigningCircuit as CircuitTypes>::CompressedProof,
   did: String,
 }
-
+type PP = <SigningCircuit as CircuitTypes>::PublicParams;
 fn main() {
   println!("=========================================================");
   println!("Nova-based Signing example");
@@ -26,23 +26,25 @@ fn main() {
 
   // Building circuit's public params
   let start = Instant::now();
-  let pp = circuit_primary.get_public_params().unwrap();
+  let pp: nova::PublicParams<nova::provider::PallasEngine> =
+    circuit_primary.get_public_params().unwrap();
   println!("Building public params took {:?}", start.elapsed());
 
+  let pp_ser = serde_json::to_string(&pp).unwrap();
+
+  let public_params_deser: PP = serde_json::from_str(&pp_ser).unwrap();
   // produce a recursive SNARK
   println!("Generating a RecursiveSNARK...");
   let start = Instant::now();
-  let recursive_snark = circuit_primary.prove(&pp).unwrap();
+  let recursive_snark = circuit_primary.prove(&public_params_deser).unwrap();
 
   println!("RecursiveSNARK::proving took {:?} ", start.elapsed());
 
   // verify the recursive SNARK
   let start = Instant::now();
-  // getting the public params for this circuit, can be done from any instance of the circuit
-  let pp = SigningCircuit::default().get_public_params().unwrap();
 
   println!("Verifying a RecursiveSNARK...");
-  let res = SigningCircuit::verify(&pp, &recursive_snark);
+  let res = SigningCircuit::verify(&public_params_deser, &recursive_snark);
   println!(
     "RecursiveSNARK::verify: {:?}, took {:?}",
     res.is_ok(),
@@ -56,13 +58,14 @@ fn main() {
   println!("Compressing the RecursiveSNARK...");
   let start = Instant::now();
 
-  let compressed_proof = SigningCircuit::compress_proof(&pp, &recursive_snark).unwrap();
+  let compressed_proof =
+    SigningCircuit::compress_proof(&public_params_deser, &recursive_snark).unwrap();
   println!("CompressedSNARK::prove took {:?} ", start.elapsed());
 
   // verify the compressed SNARK
   println!("Verifying a CompressedSNARK...");
   let start = Instant::now();
-  let res = SigningCircuit::verify_compressed(&pp, &compressed_proof);
+  let res = SigningCircuit::verify_compressed(&public_params_deser, &compressed_proof);
   println!(
     "CompressedSNARK::verify: {:?}, took {:?}",
     res.is_ok(),

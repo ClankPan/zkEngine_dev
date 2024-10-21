@@ -138,13 +138,16 @@ type S1 = ppsnark::RelaxedR1CSSNARK<E1, EE1>;
 type S2 = snark::RelaxedR1CSSNARK<E2, EE2>;
 
 /// Holds the type for the compressed proof of the signing circuit
-pub trait CompressedProof {
+pub trait CircuitTypes {
+  /// The type of the public params
+  type PublicParams;
   /// The type of the compressed proof
   type CompressedProof;
 }
 
-impl CompressedProof for SigningCircuit<<E1 as Engine>::Scalar> {
+impl CircuitTypes for SigningCircuit<<E1 as Engine>::Scalar> {
   type CompressedProof = CompressedSNARK<E1, S1, S2>;
+  type PublicParams = PublicParams<E1>;
 }
 
 impl SigningCircuit<<E1 as Engine>::Scalar> {
