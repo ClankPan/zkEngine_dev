@@ -22,8 +22,9 @@ use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
 use std::error;
 
 /// Create a circuit that signs a message
+/// The default scalar field is PallasEngine's scalar field
 #[derive(Clone)]
-pub struct SigningCircuit<Scalar: PrimeField> {
+pub struct SigningCircuit<Scalar: PrimeField = <E1 as Engine>::Scalar> {
   hash: Vec<u8>,       // The hash of the message to be signed
   secret_key: Vec<u8>, // The secret key to sign the message
   _p: PhantomData<Scalar>,
@@ -128,12 +129,23 @@ fn sign_hash_slice(secret_key: &SecretKey, hash: &[u8]) -> Signature {
   secp.sign_ecdsa(&message, &secret_key)
 }
 
+// Types to be used with circuit's default type parameter
 type E1 = PallasEngine;
 type E2 = VestaEngine;
 type EE1 = ipa_pc::EvaluationEngine<E1>;
 type EE2 = ipa_pc::EvaluationEngine<E2>;
 type S1 = ppsnark::RelaxedR1CSSNARK<E1, EE1>;
 type S2 = snark::RelaxedR1CSSNARK<E2, EE2>;
+
+/// Holds the type for the compressed proof of the signing circuit
+pub trait CompressedProof {
+  /// The type of the compressed proof
+  type CompressedProof;
+}
+
+impl CompressedProof for SigningCircuit<<E1 as Engine>::Scalar> {
+  type CompressedProof = CompressedSNARK<E1, S1, S2>;
+}
 
 impl SigningCircuit<<E1 as Engine>::Scalar> {
   /// Builds the public parameters for the circuit
@@ -149,18 +161,24 @@ impl SigningCircuit<<E1 as Engine>::Scalar> {
   }
 
   /// Proves the circuit, this function builds the public params and returns a recursive SNARK
-  pub fn prove(&self) -> Result<RecursiveSNARK<E1>, Box<dyn error::Error>> {
-    let pp = self.get_public_params()?;
-
+  pub fn prove(
+    &self,
+    public_params: &PublicParams<E1>,
+  ) -> Result<RecursiveSNARK<E1>, Box<dyn error::Error>> {
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
     let circuit_secondary = C2::default();
     let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
     let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
 
-    let mut recursive_snark: RecursiveSNARK<E1> =
-      RecursiveSNARK::<E1>::new(&pp, self, &circuit_secondary, &z0_primary, &z0_secondary)?;
+    let mut recursive_snark: RecursiveSNARK<E1> = RecursiveSNARK::<E1>::new(
+      &public_params,
+      self,
+      &circuit_secondary,
+      &z0_primary,
+      &z0_secondary,
+    )?;
 
-    recursive_snark.prove_step(&pp, self, &circuit_secondary)?;
+    recursive_snark.prove_step(&public_params, self, &circuit_secondary)?;
 
     Ok(recursive_snark)
   }
