@@ -6,7 +6,7 @@ use bp_ecdsa::core::Circuit;
 use bp_ecdsa::core::{ConstraintSystem, SynthesisError};
 use ff::{PrimeField, PrimeFieldBits};
 use halo2curves::{
-  secp256k1::{Fp, Fq, Secp256k1, Secp256k1Affine},
+  secp256k1::{Fp, Fq, Secp256k1Affine},
   serde::{endian::EndianRepr, SerdeObject},
 };
 use pairing::Engine;
@@ -16,7 +16,6 @@ use crypto_bigint::U256;
 
 use base64::{display::Base64Display, engine::general_purpose::STANDARD};
 use bp_ecdsa::{curve::AllocatedAffinePoint, ecdsa::verify_eff};
-use sha2::{Digest, Sha256};
 use std::ops::Mul;
 
 struct CurvePoint {
