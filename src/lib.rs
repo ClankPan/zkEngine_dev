@@ -5,6 +5,7 @@
 
 mod circuits;
 pub mod errors;
+pub mod groth16;
 pub mod pcd;
 pub mod precompiles;
 pub mod provider;
