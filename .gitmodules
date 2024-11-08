@@ -1,3 +1,0 @@
-[submodule "third-party/bp-ecdsa"]
-	path = third-party/bp-ecdsa
-	url = https://github.com/varunthakore/bp-ecdsa.git
