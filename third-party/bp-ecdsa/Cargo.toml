@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 bellpepper = { git = "https://github.com/varunthakore/bellpepper.git" }
-bellpepper-core = { git = "https://github.com/varunthakore/bellpepper.git" }
+bellpepper-core = "0.2.0"
 ff = "0.13.0"
 crypto-bigint = "0.5.0"
 

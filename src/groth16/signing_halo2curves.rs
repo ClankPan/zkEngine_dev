@@ -1,26 +1,30 @@
 //! Simulating a signing circuit
 use bellperson::groth16;
-use blstrs::Bls12;
+use blstrs::{Bls12, Scalar as Fr};
+use bp_ecdsa::core::boolean::Boolean;
 use bp_ecdsa::core::num::AllocatedNum;
 use bp_ecdsa::core::Circuit;
 use bp_ecdsa::core::{ConstraintSystem, SynthesisError};
-use ff::{PrimeField, PrimeFieldBits};
-use halo2curves::{
-  secp256k1::{Fp, Fq, Secp256k1Affine},
-  serde::{endian::EndianRepr, SerdeObject},
-};
+use ff::{Field, PrimeField, PrimeFieldBits};
+use halo2curves::hash_to_curve::hash_to_curve;
+use halo2curves::CurveExt;
+// use halo2curves::{
+//   bn256::{Fq, Fr, Bn256},
+//   serde::{Repr, SerdeObject},
+// };
 use pairing::Engine;
 use rand::rngs::OsRng;
 
-use crypto_bigint::U256;
+use crypto_bigint::{Encoding, Random, Zero, U256};
 
 use base64::{display::Base64Display, engine::general_purpose::STANDARD};
 use bp_ecdsa::{curve::AllocatedAffinePoint, ecdsa::verify_eff};
-use std::ops::Mul;
+use sha2::{Digest, Sha256};
+use std::ops::{Mul, Neg};
 
 struct CurvePoint {
-  x: Option<Fp>,
-  y: Option<Fp>,
+  x: Option<Fr>,
+  y: Option<Fr>,
 }
 
 /// Set fields to `None` when we are verifying a proof (and do not have the witness data).
@@ -34,8 +38,8 @@ struct MyCircuit {
   public_key: Option<Secp256k1Affine>,
 }
 
-impl Circuit<Fp> for MyCircuit {
-  fn synthesize<CS: ConstraintSystem<Fp>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
+impl Circuit<Fr> for MyCircuit {
+  fn synthesize<CS: ConstraintSystem<Fr>>(self, cs: &mut CS) -> Result<(), SynthesisError> {
     let t = if let Some(t) = self.t {
       CurvePoint {
         x: Some(t.x),
@@ -79,81 +83,11 @@ impl Circuit<Fp> for MyCircuit {
       t_alloc,
       u_alloc,
       public_key_alloc,
-    );
+    )
+    .unwrap();
 
-    /*let secret_key_hex = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-        let secret_key = hex::decode(secret_key_hex).unwrap();
+    let _ = Boolean::enforce_equal(cs, &out, &Boolean::Constant(true));
 
-        let sk = Fq::from_bytes(&secret_key.try_into().unwrap()).unwrap();
-
-        let g = Secp256k1Affine::generator();
-
-        let pk: Secp256k1Affine = g.mul(sk).into();
-        let hash = if let Some(hash) = self.hash {
-          hash
-        } else {
-          [0u8; 32]
-        };
-
-        let (recoveryId, signature): (RecoveryId, [u8; 64]) = if let Some(signature) = self.signature {
-          (
-            TryFrom::try_from(signature[0] as i32).unwrap(),
-            signature[1..].try_into().unwrap(),
-          )
-        } else {
-          (RecoveryId::Zero, [0u8; 64])
-        };
-
-        let public_key = if let Some(public_key) = self.public_key {
-          public_key
-        } else {
-          [0u8; 33]
-        };
-
-        // TODO: Implement signature circuit
-        // Currently is simulated
-
-        let public_key_bits = public_key
-          .iter()
-          .map(|byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8))
-          .flatten()
-          .map(|b| Some(b))
-          .collect::<Vec<_>>();
-
-        // witness the bits of the public key
-        let public_key_bits = public_key_bits
-          .into_iter()
-          .enumerate()
-          .map(|(i, b)| AllocatedBit::alloc(cs.namespace(|| format!("public key bit {}", i)), b))
-          .map(|b| b.map(Boolean::from))
-          .collect::<Result<Vec<_>, _>>()?;
-
-        let rec_sig = RecoverableSignature::from_compact(&signature, recoveryId).unwrap();
-        let message = Message::from_digest_slice(&hash).unwrap();
-
-        let signer_pk = rec_sig.recover(&message).unwrap().serialize();
-
-        let signer_pk_bits = signer_pk
-          .iter()
-          .map(|byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8))
-          .flatten()
-          .map(|b| Boolean::constant(b))
-          .collect::<Vec<_>>();
-
-        // witness the bits of the expected public key
-
-        // Expose the vector of 32 boolean variables as compact public inputs.
-        multipack::pack_into_inputs(cs.namespace(|| "pack expected public key"), &signer_pk_bits);
-
-        // Test equality of the two public keys
-        for (i, (a, b)) in public_key_bits
-          .iter()
-          .zip(signer_pk_bits.iter())
-          .enumerate()
-        {
-          Boolean::enforce_equal(cs.namespace(|| format!("public key bit {}", i)), a, b)?;
-        }
-    */
     Ok(())
   }
 }
@@ -180,54 +114,34 @@ fn main() {
 
   let value = Base64Display::new(&pk_ser, &STANDARD);
   println!("Public key: {:?}", format!("base64: {}", value));
-  println!("x: {:?}", pk.x.to_bytes());
-  println!("y: {:?}", pk.y.to_bytes());
+  println!("x: {:?}", pk.x.to_bytes().reverse());
+  println!("y: {:?}", pk.y.to_bytes().reverse());
 
-  // Prepare the verification key (for proof verification).
-  /* let params = {
-    let c = MyCircuit {
-      hash: None,
-      signature: None,
+  let message = "Hello world!";
+  let hash: [u8; 32] = Sha256::digest(message.as_bytes()).try_into().unwrap();
+  let hash_le: [u8; 32] = hash
+    .iter()
+    .rev()
+    .copied()
+    .collect::<Vec<u8>>()
+    .try_into()
+    .unwrap();
+  let msg = Fq::from_repr(hash.into()).unwrap();
+
+  let (r, s) = sign(msg, sk);
+
+  let (t, u) = get_points(r, msg);
+
+  // initialize params with dummy circuit
+  let params = {
+    let circuit = MyCircuit {
+      scalar: U256::ZERO,
+      t: None,
+      u: None,
       public_key: None,
     };
-    groth16::generate_random_parameters::<Bls12, _, _>(c, &mut OsRng).unwrap();
+    groth16::generate_random_parameters::<Bls12, _, _>(circuit, &mut OsRng).unwrap()
   };
-    let pvk = groth16::prepare_verifying_key(&params.vk);
-
-  // Pick a hash and public key, and sign the hash.
-
-  let secp = Secp256k1::new();
-  let (secret_key, public_key) = secp.generate_keypair(&mut OsRng);
-  let message = b"hello world";
-  let hash = Sha256::digest(message);
-  let message = Message::from_digest_slice(&hash).unwrap();
-  let signature = secp.sign_ecdsa_recoverable(&message, &secret_key);
-
-  let serialized_signature = signature.serialize_compact();
-  let mut signature_slice = [0u8; 65];
-  signature_slice[0] = Into::<i32>::into(serialized_signature.0) as u8;
-  signature_slice[1..].copy_from_slice(&serialized_signature.1);
-
-  // Create an instance of our circuit (with the preimage as a witness).
-  let c = MyCircuit {
-    hash: Some(hash.into()),
-    signature: Some(signature_slice),
-    public_key: Some(public_key.serialize()),
-  };
-
-  // Create a Groth16 proof with our parameters.
-  let proof = groth16::create_random_proof(c, &params, &mut OsRng).unwrap();
-
-  // Pack the public key as inputs for proof verification.
-  let public_key_bits = public_key
-    .serialize()
-    .iter()
-    .map(|byte| (0..8).rev().map(move |i| (byte >> i) & 1u8 == 1u8))
-    .flatten()
-    .collect::<Vec<_>>();
-  let inputs = multipack::compute_multipacking::<blstrs::Scalar>(&public_key_bits);
-  // Check the proof!
-  assert!(groth16::verify_proof(&pvk, &proof, &inputs).unwrap()); */
 }
 
 fn alloc_affine_point<CS, F>(
@@ -257,4 +171,55 @@ where
     x: x_alloc,
     y: y_alloc,
   })
+}
+
+/// Signs a message using the private key, returns the signature (r, s)
+fn sign(msg: Fq, priv_key: Fq) -> (Secp256k1Affine, Fq) {
+  // let mut rng = thread_rng();
+  let n = U256::from_be_hex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+  let g = Secp256k1Affine::generator();
+
+  let k = Fq::random(OsRng);
+  let k_inv = k.invert();
+  assert!(bool::from(k_inv.is_some()));
+  let k_inv = k_inv.unwrap();
+
+  let r: Secp256k1Affine = g.mul(k).into();
+  let r_x = Fq::from_repr(
+    U256::from_le_bytes(r.x.to_bytes())
+      .add_mod(&U256::ZERO, &n)
+      .to_le_bytes()
+      .into(),
+  );
+  assert!(bool::from(r_x.is_some()));
+  let r_x = r_x.unwrap();
+
+  let s = k_inv * (msg + priv_key * r_x);
+
+  (r, s)
+}
+
+/// Gets the T and U points from R (output of message signature) and the message
+fn get_points(r: Secp256k1Affine, msg: Fq) -> (Secp256k1Affine, Secp256k1Affine) {
+  let n = U256::from_be_hex("fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141");
+
+  let g = Secp256k1Affine::generator();
+
+  let r_q = Fq::from_repr(
+    U256::from_le_bytes(r.x.to_bytes())
+      .add_mod(&U256::ZERO, &n)
+      .to_le_bytes()
+      .into(),
+  );
+  assert!(bool::from(r_q.is_some()));
+  let r_q = r_q.unwrap();
+
+  let r_q_inv = r_q.invert();
+  assert!(bool::from(r_q_inv.is_some()));
+  let r_q_inv = r_q_inv.unwrap();
+
+  let t: Secp256k1Affine = r.mul(r_q_inv).into();
+  let u: Secp256k1Affine = g.mul(r_q_inv * msg).neg().into();
+
+  (t, u)
 }
