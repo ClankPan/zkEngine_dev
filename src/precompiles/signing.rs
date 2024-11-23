@@ -1,13 +1,10 @@
 //! Simulating a signing circuit
 #![allow(non_snake_case)]
-use bellpepper::gadgets::Assignment;
-use bellpepper_core::{
-  boolean::{AllocatedBit, Boolean},
-  num::{AllocatedNum, Num},
-  ConstraintSystem, SynthesisError,
-};
-use core::marker::PhantomData;
+use bellpepper_core::{boolean::Boolean, num::AllocatedNum, ConstraintSystem, SynthesisError};
+use bp_ecdsa::{curve::AllocatedAffinePoint, ecdsa::verify_eff};
+use crypto_bigint::{Encoding, U256};
 use ff::{Field, PrimeField, PrimeFieldBits};
+use halo2curves::{group::Group, CurveExt};
 use nova::{
   provider::{ipa_pc, PallasEngine, VestaEngine},
   spartan::{ppsnark, snark},
@@ -18,24 +15,37 @@ use nova::{
   },
   CompressedSNARK, PublicParams, RecursiveSNARK,
 };
-use secp256k1::{ecdsa::Signature, Message, PublicKey, Secp256k1, SecretKey};
+use rand::rngs::OsRng;
 use std::error;
+use std::ops::{Mul, Neg};
+
+type Fp = <E1 as Engine>::Base;
+type Fq = <E1 as Engine>::Scalar;
+type Point = <E1 as Engine>::GE;
 
 /// Create a circuit that signs a message
 /// The default scalar field is PallasEngine's scalar field
 #[derive(Clone)]
-pub struct SigningCircuit<Scalar: PrimeField = <E1 as Engine>::Scalar> {
-  hash: Vec<u8>,       // The hash of the message to be signed
-  secret_key: Vec<u8>, // The secret key to sign the message
-  _p: PhantomData<Scalar>,
+pub struct SigningCircuit<Scalar: PrimeField = Fq> {
+  scalar: U256,
+  t_x: Scalar,
+  t_y: Scalar,
+  u_x: Scalar,
+  u_y: Scalar,
+  public_key_x: Scalar,
+  public_key_y: Scalar,
 }
 
-impl Default for SigningCircuit<<E1 as Engine>::Scalar> {
+impl Default for SigningCircuit<Fq> {
   fn default() -> Self {
     Self {
-      hash: vec![0u8; 32],
-      secret_key: vec![1u8; 32],
-      _p: PhantomData,
+      scalar: U256::ZERO,
+      t_x: Fq::zero(),
+      t_y: Fq::zero(),
+      u_x: Fq::zero(),
+      u_y: Fq::zero(),
+      public_key_x: Fq::zero(),
+      public_key_y: Fq::zero(),
     }
   }
 }
@@ -44,21 +54,34 @@ impl<Scalar: PrimeField + PrimeFieldBits> SigningCircuit<Scalar> {
   /// Create a new signing circuit
   /// - hash: The hash of the message to be signed, as a 32bytes vector
   /// - secret_key: The secret key to sign the message, as a 32bytes vector
-  pub fn new(hash: Vec<u8>, secret_key: Vec<u8>) -> Self {
+  pub fn new(
+    scalar: U256,
+    t_x: Scalar,
+    t_y: Scalar,
+    u_x: Scalar,
+    u_y: Scalar,
+    public_key_x: Scalar,
+    public_key_y: Scalar,
+  ) -> Self {
     Self {
-      hash,
-      secret_key,
-      _p: PhantomData,
+      scalar,
+      t_x,
+      t_y,
+      u_x,
+      u_y,
+      public_key_x,
+      public_key_y,
     }
   }
 }
 
-impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit<Scalar> {
+impl<Scalar: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Scalar>
+  for SigningCircuit<Scalar>
+{
   fn arity(&self) -> usize {
-    4
+    0
   }
 
-  /// No clue if it is supposed to be incremental or external, just took a guess
   fn get_counter_type(&self) -> nova::StepCounterType {
     nova::StepCounterType::Incremental
   }
@@ -68,65 +91,20 @@ impl<Scalar: PrimeField + PrimeFieldBits> StepCircuit<Scalar> for SigningCircuit
     cs: &mut CS,
     _z: &[AllocatedNum<Scalar>],
   ) -> Result<Vec<AllocatedNum<Scalar>>, SynthesisError> {
-    let mut z_out: Vec<AllocatedNum<Scalar>> = Vec::new();
+    let t_alloc = AllocatedAffinePoint::alloc_affine_point(cs, self.t_x, self.t_y)?;
 
-    let (private_key, _) = create_key_pair_from_bytes(&self.secret_key.as_slice());
+    let u_alloc = AllocatedAffinePoint::alloc_affine_point(cs, self.u_x, self.u_y)?;
 
-    let signature = sign_hash_slice(&private_key, &self.hash);
-    let signature_bytes = signature.serialize_compact();
+    let public_key_alloc =
+      AllocatedAffinePoint::alloc_affine_point(cs, self.public_key_x, self.public_key_y)?;
 
-    let signature_values: Vec<_> = signature_bytes
-      .into_iter()
-      .flat_map(|byte| (0..8).map(move |i| (byte >> i) & 1u8 == 1u8))
-      .map(Some)
-      .collect();
+    let out = verify_eff(cs, self.scalar, t_alloc, u_alloc, public_key_alloc).unwrap();
 
-    let signature_bits = signature_values
-      .into_iter()
-      .enumerate()
-      .map(|(i, b)| AllocatedBit::alloc(cs.namespace(|| format!("signature bit {i}")), b))
-      .map(|b| b.map(Boolean::from))
-      .collect::<Result<Vec<_>, _>>()?;
-
-    for (i, sign_bits) in signature_bits.chunks(128_usize).enumerate() {
-      let mut num = Num::<Scalar>::zero();
-      let mut coeff = Scalar::ONE;
-      for bit in sign_bits {
-        num = num.add_bool_with_coeff(CS::one(), bit, coeff);
-
-        coeff = coeff.double();
-      }
-
-      let sign = AllocatedNum::alloc(cs.namespace(|| format!("input {i}")), || {
-        Ok(*num.get_value().get()?)
-      })?;
-
-      // num * 1 = sign
-      cs.enforce(
-        || format!("packing constraint {i}"),
-        |_| num.lc(Scalar::ONE),
-        |lc| lc + CS::one(),
-        |lc| lc + sign.get_variable(),
-      );
-
-      z_out.push(sign);
+    match Boolean::enforce_equal(cs, &out, &Boolean::Constant(true)) {
+      Ok(_) => Ok(vec![]),
+      Err(e) => Err(e),
     }
-
-    Ok(z_out)
   }
-}
-
-fn create_key_pair_from_bytes(secret_bytes: &[u8]) -> (SecretKey, PublicKey) {
-  let secp = Secp256k1::new();
-  let secret_key = SecretKey::from_slice(secret_bytes).expect("32 bytes");
-  let public_key = PublicKey::from_secret_key(&secp, &secret_key);
-  (secret_key, public_key)
-}
-
-fn sign_hash_slice(secret_key: &SecretKey, hash: &[u8]) -> Signature {
-  let message = Message::from_digest_slice(&hash).expect("32 bytes");
-  let secp = Secp256k1::new();
-  secp.sign_ecdsa(&message, &secret_key)
 }
 
 // Types to be used with circuit's default type parameter
@@ -145,12 +123,14 @@ pub trait CircuitTypes {
   type CompressedProof;
 }
 
-impl CircuitTypes for SigningCircuit<<E1 as Engine>::Scalar> {
+impl CircuitTypes for SigningCircuit<Fq> {
   type CompressedProof = CompressedSNARK<E1, S1, S2>;
   type PublicParams = PublicParams<E1>;
 }
 
-impl SigningCircuit<<E1 as Engine>::Scalar> {
+impl SigningCircuit<Fq> {
+  // pub fn build_circuit(hash: &[u8], signature: [u8; 65], public_key: <E1 as Engine>::GE);
+
   /// Builds the public parameters for the circuit
   pub fn get_public_params(&self) -> Result<PublicParams<E1>, Box<dyn error::Error>> {
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
@@ -170,7 +150,7 @@ impl SigningCircuit<<E1 as Engine>::Scalar> {
   ) -> Result<RecursiveSNARK<E1>, Box<dyn error::Error>> {
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
     let circuit_secondary = C2::default();
-    let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
+    let z0_primary = [<E1 as Engine>::Scalar::ZERO];
     let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
 
     let mut recursive_snark: RecursiveSNARK<E1> = RecursiveSNARK::<E1>::new(
@@ -202,7 +182,7 @@ impl SigningCircuit<<E1 as Engine>::Scalar> {
     public_params: &PublicParams<E1>,
     recursive_snark: &RecursiveSNARK<E1>,
   ) -> Result<Vec<<E1 as Engine>::Scalar>, Box<dyn error::Error>> {
-    let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
+    let z0_primary = [<E1 as Engine>::Scalar::ZERO];
     let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
 
     let res = recursive_snark.verify(&public_params, 1, &z0_primary, &z0_secondary);
@@ -216,7 +196,7 @@ impl SigningCircuit<<E1 as Engine>::Scalar> {
     public_params: &PublicParams<E1>,
     compressed_proof: &CompressedSNARK<E1, S1, S2>,
   ) -> Result<Vec<<E1 as Engine>::Scalar>, Box<dyn error::Error>> {
-    let z0_primary = [<E1 as Engine>::Scalar::ZERO; 4];
+    let z0_primary = [<E1 as Engine>::Scalar::ZERO];
     let z0_secondary = [<E2 as Engine>::Scalar::ZERO];
 
     let (_, vk) = CompressedSNARK::<E1, S1, S2>::setup(&public_params)?;
@@ -224,4 +204,80 @@ impl SigningCircuit<<E1 as Engine>::Scalar> {
 
     Ok(res)
   }
+}
+
+/// Signs a message using the private key, returns the signature (r, s)
+pub fn sign(msg: Fq, priv_key: Fq) -> (Point, Fq) {
+  // let mut rng = thread_rng();
+  let n = U256::from_be_hex("40000000000000000000000000000000224698fc0994a8dd8c46eb2100000001");
+  let g = Point::generator();
+
+  let k = Fq::random(OsRng);
+  let k_inv = k.invert();
+  assert!(bool::from(k_inv.is_some()));
+  let k_inv = k_inv.unwrap();
+
+  let r: Point = g.mul(k).into();
+  let (r_x, _, r_z) = r.jacobian_coordinates();
+  let r_zinv = r_z.invert().unwrap();
+  let r_zinv2 = r_zinv.square();
+  let r_x = r_x * r_zinv2;
+  let r_x = Fq::from_repr(
+    U256::from_le_bytes(r_x.to_repr())
+      .add_mod(&U256::ZERO, &n)
+      .to_le_bytes()
+      .into(),
+  );
+  assert!(bool::from(r_x.is_some()));
+  let r_x = r_x.unwrap();
+
+  let s = k_inv * (msg + priv_key * r_x);
+
+  (r, s)
+}
+
+/// returns x coordinate of the point in affine coordinates
+pub fn get_x_affine(point: Point) -> Fp {
+  let (x, _, z) = point.jacobian_coordinates();
+  let z_inv = z.invert().unwrap();
+  let z_inv2 = z_inv.square();
+  let x = x * z_inv2;
+  x
+}
+
+/// returns y coordinate of the point in affine coordinates
+pub fn get_y_affine(point: Point) -> Fp {
+  let (_, y, z) = point.jacobian_coordinates();
+  let z_inv = z.invert().unwrap();
+  let z_inv3 = z_inv.square() * z_inv;
+  let y = y * z_inv3;
+  y
+}
+
+/// Gets the T and U points from R (output of message signature) and the message
+pub fn get_points(r: Point, msg: Fq) -> (Point, Point) {
+  let n = U256::from_be_hex("40000000000000000000000000000000224698fc0994a8dd8c46eb2100000001");
+
+  let g = Point::generator();
+  let (r_x, _, r_z) = r.jacobian_coordinates();
+  let r_zinv = r_z.invert().unwrap();
+  let r_zinv2 = r_zinv.square();
+  let r_x = r_x * r_zinv2;
+  let r_q = Fq::from_repr(
+    U256::from_le_bytes(r_x.to_repr())
+      .add_mod(&U256::ZERO, &n)
+      .to_le_bytes()
+      .into(),
+  );
+  assert!(bool::from(r_q.is_some()));
+  let r_q = r_q.unwrap();
+
+  let r_q_inv = r_q.invert();
+  assert!(bool::from(r_q_inv.is_some()));
+  let r_q_inv = r_q_inv.unwrap();
+
+  let t: Point = r.mul(r_q_inv).into();
+  let u: Point = g.mul(r_q_inv * msg).neg().into();
+
+  (t, u)
 }

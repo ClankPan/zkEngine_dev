@@ -1,0 +1,290 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in library 'zk_engine'",
+      "cargo": {
+        "args": ["test", "--no-run", "--lib", "--package=zk-engine"],
+        "filter": {
+          "name": "zk_engine",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'batched'",
+      "cargo": {
+        "args": ["build", "--example=batched", "--package=zk-engine"],
+        "filter": {
+          "name": "batched",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'batched'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=batched",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "batched",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'compile_wasm'",
+      "cargo": {
+        "args": ["build", "--example=compile_wasm", "--package=zk-engine"],
+        "filter": {
+          "name": "compile_wasm",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'compile_wasm'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=compile_wasm",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "compile_wasm",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'default'",
+      "cargo": {
+        "args": ["build", "--example=default", "--package=zk-engine"],
+        "filter": {
+          "name": "default",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'default'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=default",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "default",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'serialized'",
+      "cargo": {
+        "args": ["build", "--example=serialized", "--package=zk-engine"],
+        "filter": {
+          "name": "serialized",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'serialized'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=serialized",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "serialized",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'serialized_batched'",
+      "cargo": {
+        "args": [
+          "build",
+          "--example=serialized_batched",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "serialized_batched",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'serialized_batched'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=serialized_batched",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "serialized_batched",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'signing'",
+      "cargo": {
+        "args": [
+          "+nightly",
+          "build",
+          "--example=signing",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "signing",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'signing'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=signing",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "signing",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'spartan'",
+      "cargo": {
+        "args": ["build", "--example=spartan", "--package=zk-engine"],
+        "filter": {
+          "name": "spartan",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'spartan'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--example=spartan",
+          "--package=zk-engine"
+        ],
+        "filter": {
+          "name": "spartan",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug example 'zkml'",
+      "cargo": {
+        "args": ["build", "--example=zkml", "--package=zk-engine"],
+        "filter": {
+          "name": "zkml",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in example 'zkml'",
+      "cargo": {
+        "args": ["test", "--no-run", "--example=zkml", "--package=zk-engine"],
+        "filter": {
+          "name": "zkml",
+          "kind": "example"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
