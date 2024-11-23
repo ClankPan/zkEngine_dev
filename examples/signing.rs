@@ -35,7 +35,7 @@ fn main() {
   // The order of the scalar field
   let n = U256::from_be_hex("40000000000000000000000000000000224698fc0994a8dd8c46eb2100000001");
 
-  let secret_key_hex = b"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  let secret_key_hex = b"4123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   let secret_key: [u8; 32] = hex::decode(secret_key_hex).unwrap().try_into().unwrap();
 
   let msg = b"Hello, World!";
@@ -51,11 +51,11 @@ fn main() {
   )
   .unwrap();
 
-  let secret_key_elem = Fq::from_repr(
-    U256::from_le_bytes(secret_key.into())
-      .add_mod(&U256::ZERO, &n)
-      .to_le_bytes(),
-  );
+  let secret_key_u256 = U256::from_le_bytes(secret_key.into());
+  let secret_key_mod = secret_key_u256.checked_rem(&n).unwrap();
+  let secret_key_u256_final = secret_key_mod.to_le_bytes();
+
+  let secret_key_elem = Fq::from_repr(secret_key_u256_final);
 
   if secret_key_elem.is_none().into() {
     panic!("Invalid secret key");
