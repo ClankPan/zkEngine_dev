@@ -305,7 +305,7 @@ dependencies = [
 [[package]]
 name = "bp-ecdsa"
 version = "0.1.0"
-source = "git+https://github.com/AntoineF4C5/bp-ecdsa.git#1f49bf146aed86000e845a78a0b39c7f24d74322"
+source = "git+https://github.com/AntoineF4C5/bp-ecdsa.git#ee1f067b9163f0475ef9aed98a69f9d5e1ea5779"
 dependencies = [
  "bellpepper 0.4.1 (git+https://github.com/lurk-lab/bellpepper?branch=dev)",
  "bellpepper-core",
