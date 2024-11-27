@@ -2,11 +2,10 @@
 #![allow(non_snake_case)]
 use bellpepper_core::{boolean::Boolean, num::AllocatedNum, ConstraintSystem, SynthesisError};
 use bp_ecdsa::{curve::AllocatedAffinePoint, ecdsa::verify_eff};
-use crypto_bigint::{Encoding, U256};
+use crypto_bigint::U256;
 use ff::{Field, PrimeField, PrimeFieldBits};
-use halo2curves::{group::Group, CurveExt};
 use nova::{
-  provider::{ipa_pc, PallasEngine, VestaEngine},
+  provider::{ipa_pc, Secp256k1Engine, Secq256k1Engine},
   spartan::{ppsnark, snark},
   traits::{
     circuit::{StepCircuit, TrivialCircuit},
@@ -17,49 +16,43 @@ use nova::{
 };
 use std::error;
 
-type Fq = <E2 as Engine>::Base;
+// Types to be used with circuit's default type parameter
+type E1 = Secp256k1Engine;
+type E2 = Secq256k1Engine;
+type EE1 = ipa_pc::EvaluationEngine<E1>;
+type EE2 = ipa_pc::EvaluationEngine<E2>;
+type S1 = ppsnark::RelaxedR1CSSNARK<E1, EE1>;
+type S2 = snark::RelaxedR1CSSNARK<E2, EE2>;
+
+// Working on Secq, so Fq is base field and Fp is scalar field
+// We need Fp as scalar field as signing circuit uses Fp, and building the proof requires the scalar field
 type Fp = <E2 as Engine>::Scalar;
-type Point = <E2 as Engine>::GE;
 
 /// Create a circuit that signs a message
 /// The default scalar field is PallasEngine's scalar field
 #[derive(Clone)]
-pub struct SigningCircuit<Base: PrimeField = Fp> {
+pub struct SigningCircuit<Scalar: PrimeField = Fp> {
   scalar: U256,
-  t_x: Base,
-  t_y: Base,
-  u_x: Base,
-  u_y: Base,
-  public_key_x: Base,
-  public_key_y: Base,
+  t_x: Scalar,
+  t_y: Scalar,
+  u_x: Scalar,
+  u_y: Scalar,
+  public_key_x: Scalar,
+  public_key_y: Scalar,
 }
 
-impl Default for SigningCircuit<Fp> {
-  fn default() -> Self {
-    Self {
-      scalar: U256::ZERO,
-      t_x: Fp::zero(),
-      t_y: Fp::zero(),
-      u_x: Fp::zero(),
-      u_y: Fp::zero(),
-      public_key_x: Fp::zero(),
-      public_key_y: Fp::zero(),
-    }
-  }
-}
-
-impl<Base: PrimeField + PrimeFieldBits> SigningCircuit<Base> {
+impl<Scalar: PrimeField + PrimeFieldBits> SigningCircuit<Scalar> {
   /// Create a new signing circuit
   /// - hash: The hash of the message to be signed, as a 32bytes vector
   /// - secret_key: The secret key to sign the message, as a 32bytes vector
   pub fn new(
     scalar: U256,
-    t_x: Base,
-    t_y: Base,
-    u_x: Base,
-    u_y: Base,
-    public_key_x: Base,
-    public_key_y: Base,
+    t_x: Scalar,
+    t_y: Scalar,
+    u_x: Scalar,
+    u_y: Scalar,
+    public_key_x: Scalar,
+    public_key_y: Scalar,
   ) -> Self {
     Self {
       scalar,
@@ -73,8 +66,8 @@ impl<Base: PrimeField + PrimeFieldBits> SigningCircuit<Base> {
   }
 }
 
-impl<Base: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Base>
-  for SigningCircuit<Base>
+impl<Scalar: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Scalar>
+  for SigningCircuit<Scalar>
 {
   fn arity(&self) -> usize {
     0
@@ -84,11 +77,11 @@ impl<Base: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Base>
     nova::StepCounterType::Incremental
   }
 
-  fn synthesize<CS: ConstraintSystem<Base>>(
+  fn synthesize<CS: ConstraintSystem<Scalar>>(
     &self,
     cs: &mut CS,
-    _z: &[AllocatedNum<Base>],
-  ) -> Result<Vec<AllocatedNum<Base>>, SynthesisError> {
+    _z: &[AllocatedNum<Scalar>],
+  ) -> Result<Vec<AllocatedNum<Scalar>>, SynthesisError> {
     let t_alloc = AllocatedAffinePoint::alloc_affine_point(cs, self.t_x, self.t_y)?;
 
     let u_alloc = AllocatedAffinePoint::alloc_affine_point(cs, self.u_x, self.u_y)?;
@@ -104,14 +97,6 @@ impl<Base: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Base>
     }
   }
 }
-
-// Types to be used with circuit's default type parameter
-type E1 = PallasEngine;
-type E2 = VestaEngine;
-type EE1 = ipa_pc::EvaluationEngine<E1>;
-type EE2 = ipa_pc::EvaluationEngine<E2>;
-type S1 = ppsnark::RelaxedR1CSSNARK<E1, EE1>;
-type S2 = snark::RelaxedR1CSSNARK<E2, EE2>;
 
 /// Holds the type for the compressed proof of the signing circuit
 pub trait CircuitTypes {

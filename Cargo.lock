@@ -54,7 +54,7 @@ checksum = "4c95c10ba0b00a02636238b814946408b1322d5ac4760326e6fb8ec956d85775"
 [[package]]
 name = "arecibo"
 version = "0.2.0"
-source = "git+https://github.com/wyattbenno777/arecibo?branch=wyatt_dev#f0ffa98c2baeafe3308e68e708ed78b7bc61033e"
+source = "git+https://github.com/AntoineF4C5/arecibo.git?branch=wyatt_dev#639a9ade7fe5d334542496ee57f7758720dcbabd"
 dependencies = [
  "abomonation",
  "abomonation_derive_ng",
@@ -67,7 +67,7 @@ dependencies = [
  "derive_more",
  "digest",
  "ff",
- "generic-array 1.1.0",
+ "generic-array 1.1.1",
  "getrandom",
  "group",
  "grumpkin-msm",
@@ -305,7 +305,7 @@ dependencies = [
 [[package]]
 name = "bp-ecdsa"
 version = "0.1.0"
-source = "git+https://github.com/AntoineF4C5/bp-ecdsa.git#ee1f067b9163f0475ef9aed98a69f9d5e1ea5779"
+source = "git+https://github.com/AntoineF4C5/bp-ecdsa.git#ed56adc7588e73aa22b0a6ca2fea113b7c6a112b"
 dependencies = [
  "bellpepper 0.4.1 (git+https://github.com/lurk-lab/bellpepper?branch=dev)",
  "bellpepper-core",
@@ -675,9 +675,9 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96512db27971c2c3eece70a1e106fbe6c87760234e31e8f7e5634912fe52794a"
+checksum = "2cb8bc4c28d15ade99c7e90b219f30da4be5c88e586277e8cbe886beeb868ab2"
 dependencies = [
  "typenum",
 ]
@@ -800,9 +800,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.15.1"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a9bfc1af68b1726ea47d3d5109de126281def866b33970e10fbab11b5dafab3"
+checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
 
 [[package]]
 name = "heck"
@@ -926,9 +926,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "1.0.13"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "540654e97a3f4470a492cd30ff187bc95d89557a903a2bbf112e2fae98104ef2"
+checksum = "d75a2a4b1b190afb6f5425f10f6a8f959d2ea0b9c2b1d79553551850539e4674"
 
 [[package]]
 name = "js-sys"
@@ -965,9 +965,9 @@ checksum = "884e2677b40cc8c339eaefcb701c32ef1fd2493d71118dc0ca4b6a736c93bd67"
 
 [[package]]
 name = "libc"
-version = "0.2.164"
+version = "0.2.166"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "433bfe06b8c75da9b2e3fbea6e5329ff87748f0b144ef75306e674c3f6f7c13f"
+checksum = "c2ccc108bbc0b1331bd061864e7cd823c0cab660bbe6970e66e2c0614decde36"
 
 [[package]]
 name = "libm"
@@ -1198,7 +1198,7 @@ dependencies = [
  "blstrs",
  "byteorder",
  "ff",
- "generic-array 1.1.0",
+ "generic-array 1.1.1",
  "pasta_curves",
  "serde",
  "trait-set",
@@ -1802,9 +1802,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.27"
+version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
+checksum = "395ae124c09f9e6918a2310af6038fba074bcf474ac352496d5910dd59a2226d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1813,9 +1813,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.32"
+version = "0.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
+checksum = "e672c95779cf947c5311f83787af4fa8fffd12fb27e4993211a84bdfd9610f9c"
 dependencies = [
  "once_cell",
  "valuable",
