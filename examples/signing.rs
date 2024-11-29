@@ -17,7 +17,6 @@ use zk_engine::precompiles::signing::{
 use rand::rngs::OsRng;
 
 type E1 = Secp256k1Engine;
-type E2 = Secq256k1Engine;
 
 type Fp = <E1 as Engine>::Base;
 type Fq = <E1 as Engine>::Scalar;
@@ -30,7 +29,7 @@ struct SendDataBody {
   did: String,
 }
 type PP = <SigningCircuit as CircuitTypes>::PublicParams;
-fn main() {
+fn main() -> anyhow::Result<()> {
   println!("=========================================================");
   println!("Nova-based Signing example");
   println!("=========================================================");
@@ -90,7 +89,7 @@ fn main() {
 
   // Building circuit's public params
   let start = Instant::now();
-  let pp: nova::PublicParams<Secq256k1Engine> = get_public_params(&circuit_primary).unwrap();
+  let pp: nova::PublicParams<Secq256k1Engine> = get_public_params(&circuit_primary)?;
   println!("Building public params took {:?}", start.elapsed());
 
   //
@@ -166,6 +165,8 @@ fn main() {
 
   let data_json = serde_json::to_string(&data).unwrap();
   println!("Data to send: {}", data_json);
+
+  Ok(())
 }
 
 /// Signs a message using the private key, returns the signature (r, s)

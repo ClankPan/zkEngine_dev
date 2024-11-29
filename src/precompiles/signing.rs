@@ -108,12 +108,13 @@ impl<Scalar: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Scalar>
       public_key_alloc,
     )?;
 
-    let out = is_valid
-      .get_value()
-      .map(|v| if v { Scalar::from(1) } else { Scalar::from(0) })
-      .ok_or(SynthesisError::AssignmentMissing)?;
-
-    let res = AllocatedNum::alloc(&mut cs.namespace(|| "alloc output"), || Ok(out))?;
+    let z_out = AllocatedNum::alloc(&mut cs.namespace(|| "alloc output"), || {
+      let out = is_valid
+        .get_value()
+        .map(|v| if v { Scalar::from(1) } else { Scalar::from(0) })
+        .ok_or(SynthesisError::AssignmentMissing)?;
+      Ok(out)
+    })?;
 
     Boolean::enforce_equal(
       &mut cs.namespace(|| "output == true"),
@@ -121,7 +122,7 @@ impl<Scalar: PrimeField<Repr = [u8; 32]> + PrimeFieldBits> StepCircuit<Scalar>
       &Boolean::Constant(true),
     )?;
 
-    Ok(vec![res])
+    Ok(vec![z_out])
   }
 }
 
@@ -141,7 +142,7 @@ impl CircuitTypes for SigningCircuit<Fp> {
 /// Builds the public parameters for the circuit
 pub fn get_public_params(
   circuit: &SigningCircuit<Fp>,
-) -> Result<PublicParams<E1>, Box<dyn error::Error>> {
+) -> Result<PublicParams<E1>, nova::errors::NovaError> {
   type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
 
   let circuit_secondary = C2::default();
